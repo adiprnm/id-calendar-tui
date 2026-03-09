@@ -1,0 +1,17 @@
+FROM ruby:3.0-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY Gemfile Gemfile.lock *.gemspec ./
+RUN bundle install --without development test
+
+# Copy the app
+COPY lib ./lib
+COPY bin ./bin
+
+# Install the gem locally
+RUN gem build *.gemspec && gem install *.gem
+
+# Run the calendar
+CMD ["calendar"]
