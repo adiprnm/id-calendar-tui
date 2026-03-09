@@ -9,6 +9,7 @@ RUN bundle install --without development test
 # Copy the app
 COPY lib ./lib
 COPY bin ./bin
+COPY README.md LICENSE ./
 
 # Install the gem locally
 RUN gem build *.gemspec && gem install *.gem
