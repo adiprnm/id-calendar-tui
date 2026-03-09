@@ -3,6 +3,7 @@ GEM
   specs:
     pastel (0.8.0)
       tty-color (~> 0.5)
+    rake (13.3.1)
     tty-color (0.6.0)
     tty-cursor (0.7.1)
 
@@ -11,6 +12,7 @@ PLATFORMS
 
 DEPENDENCIES
   pastel
+  rake
   tty-cursor
 
 BUNDLED WITH
