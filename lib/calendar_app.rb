@@ -15,12 +15,11 @@ module IndonesiaCalendar
 
     CELL_WIDTH = 4
 
-    attr_reader :view_date, :selected_day
+    attr_reader :view_date
 
     def initialize
       @pastel = Pastel.new
       @view_date = Date.today
-      @selected_day = Date.today.day
       @running = true
       @show_help = true
       @mode = :calendar
@@ -179,10 +178,12 @@ module IndonesiaCalendar
 
       lines = []
       lines << @pastel.cyan("┌#{'─' * (@screen_width - 2)}┐")
+      lines << @pastel.cyan('│') + (' ' * (@screen_width - 2)) + @pastel.cyan('│')
       lines << @pastel.cyan('│') + center_text(@pastel.bold.yellow("★ #{title_text} ★"),
                                                @screen_width - 2) + @pastel.cyan('│')
       lines << @pastel.cyan('│') + center_text(@pastel.white(date_text), @screen_width - 2) + @pastel.cyan('│')
       lines << @pastel.cyan('│') + center_text(@pastel.bright_black(today_text), @screen_width - 2) + @pastel.cyan('│')
+      lines << @pastel.cyan('│') + (' ' * (@screen_width - 2)) + @pastel.cyan('│')
       lines << @pastel.cyan("└#{'─' * (@screen_width - 2)}┘")
 
       lines.join("\n")
@@ -205,6 +206,7 @@ module IndonesiaCalendar
 
       title = " #{MONTHS_ID[@view_date.month - 1]} #{@view_date.year} "
       lines << @pastel.cyan("┌─#{title}#{'─' * (@screen_width - 3 - title.length)}┐")
+      lines << @pastel.cyan('│') + (' ' * (@screen_width - 2)) + @pastel.cyan('│')
 
       header = WEEKDAYS_ID.each_with_index.map do |d, i|
         if [0, 6].include?(i)
@@ -246,6 +248,7 @@ module IndonesiaCalendar
         lines << @pastel.cyan("│ #{' ' * calendar_padding}#{' ' * calendar_grid_width}#{' ' * (content_width - calendar_padding - calendar_grid_width)} │")
       end
 
+      lines << @pastel.cyan('│') + (' ' * (@screen_width - 2)) + @pastel.cyan('│')
       lines << @pastel.cyan("└#{'─' * (@screen_width - 2)}┘")
 
       lines.join("\n")
@@ -256,24 +259,13 @@ module IndonesiaCalendar
       is_holiday = month_holidays.key?(date)
       is_today = date == Date.today
       is_weekend = date.wday == 0 || date.wday == 6
-      is_selected = day == @selected_day && date.month == @view_date.month
 
       if is_today
         @pastel.on_green.black(" #{day_num} ")
       elsif is_holiday
-        if is_selected
-          @pastel.on_red.white(" #{day_num}*")
-        else
-          @pastel.red(" #{day_num}*")
-        end
+        @pastel.red(" #{day_num}*")
       elsif is_weekend
-        if is_selected
-          @pastel.on_bright_black.white(" #{day_num} ")
-        else
-          @pastel.bright_black(" #{day_num} ")
-        end
-      elsif is_selected
-        @pastel.on_cyan.black(" #{day_num} ")
+        @pastel.bright_black(" #{day_num} ")
       else
         @pastel.white(" #{day_num} ")
       end
@@ -282,26 +274,20 @@ module IndonesiaCalendar
     def render_holiday_panel
       month_holidays = IndonesiaCalendar::Holidays.holidays_for_month(@view_date.year, @view_date.month)
 
-      selected_date = begin
-        Date.new(@view_date.year, @view_date.month, @selected_day)
-      rescue StandardError
-        @view_date
-      end
-
       lines = []
       lines << @pastel.yellow("┌─ Hari Libur #{'─' * (@screen_width - 15)}┐")
+      lines << @pastel.yellow('│') + (' ' * (@screen_width - 2)) + @pastel.yellow('│')
 
       if month_holidays.empty?
         text = '  Tidak ada hari libur bulan ini'
         lines << @pastel.yellow('│') + text.ljust(@screen_width - 2) + @pastel.yellow('│')
       else
         month_holidays.each do |date, holiday|
-          marker = date == selected_date ? @pastel.bold.green('▶') : ' '
           day_str = @pastel.cyan(date.day.to_s.rjust(2))
           name = @pastel.white(holiday[:name])
           type = format_holiday_type(holiday[:type])
 
-          line = "  #{marker} #{day_str}. #{name} #{type}"
+          line = "    #{day_str}. #{name} #{type}"
           line_visible = line.gsub(/\e\[[0-9;]*m/, '')
           lines << @pastel.yellow('│') + line + ' ' * (@screen_width - 2 - line_visible.length) + @pastel.yellow('│')
         end
@@ -327,30 +313,12 @@ module IndonesiaCalendar
     end
 
     def render_status_bar
-      selected_date = begin
-        Date.new(@view_date.year, @view_date.month, @selected_day)
-      rescue StandardError
-        @view_date
-      end
-      month_holidays = IndonesiaCalendar::Holidays.holidays_for_month(@view_date.year, @view_date.month)
-
-      if month_holidays.key?(selected_date)
-        holiday = month_holidays[selected_date]
-        status = "★ #{holiday[:name]}"
-      else
-        status = "#{WEEKDAYS_ID[selected_date.wday]}, #{@selected_day} #{MONTHS_ID[@view_date.month - 1]} #{@view_date.year}"
-      end
-
       lines = []
-      lines << @pastel.magenta("┌#{'─' * (@screen_width - 2)}┐")
-      lines << @pastel.magenta('│') + " #{status.ljust(@screen_width - 3)}" + @pastel.magenta('│')
 
       help_items = [
-        "#{@pastel.bright_black('< >')} #{@pastel.bright_black('Bulan')}",
-        "#{@pastel.bright_black('HJKL')} #{@pastel.bright_black('Nav')}",
+        "#{@pastel.bright_black('j l')} #{@pastel.bright_black('Bulan')}",
         "#{@pastel.bright_black('g')} #{@pastel.bright_black('Today')}",
         "#{@pastel.bright_black('y')} #{@pastel.bright_black('Tahun')}",
-        "#{@pastel.bright_black('?')} #{@pastel.bright_black('Help')}",
         "#{@pastel.bright_black('q')} #{@pastel.bright_black('Keluar')}"
       ]
 
@@ -360,9 +328,8 @@ module IndonesiaCalendar
       help_padding = (content_width - help_visible.length) / 2
       help_line = " #{' ' * help_padding}#{help_text}#{' ' * (content_width - help_visible.length - help_padding)} "
 
-      lines << @pastel.magenta("├#{'─' * (@screen_width - 2)}┤")
-      lines << @pastel.magenta('│') + help_line + @pastel.magenta('│')
-      lines << @pastel.magenta("└#{'─' * (@screen_width - 2)}┘")
+      lines << ''
+      lines << " #{ help_line }"
 
       lines.join("\n")
     end
@@ -380,17 +347,11 @@ module IndonesiaCalendar
           if c2 == '['
             c3 = read_char
             case c3
-            when 'A' then move_selection(-7)
-                          changed = true
-            when 'B' then move_selection(7)
-                          changed = true
             when 'C'
               @view_date = @view_date >> 1
-              @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
               changed = true
             when 'D'
               @view_date = @view_date << 1
-              @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
               changed = true
             end
           end
@@ -402,46 +363,27 @@ module IndonesiaCalendar
           @running = false
         when 'h', 'H'
           @view_date = @view_date << 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
           changed = true
         when 'l', 'L'
           @view_date = @view_date >> 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
-          changed = true
-        when 'k', 'K'
-          move_selection(-7)
-          changed = true
-        when 'j', 'J'
-          move_selection(7)
           changed = true
         when 'w', 'W'
           @view_date = @view_date >> 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
           changed = true
         when 'b', 'B'
           @view_date = @view_date << 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
           changed = true
         when ',', '<'
           @view_date = @view_date << 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
           changed = true
         when '.', '>'
           @view_date = @view_date >> 1
-          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
           changed = true
         when 'g'
           @view_date = Date.today
-          @selected_day = Date.today.day
           changed = true
         when 'y', 'Y'
           show_year_holidays
-          changed = true
-        when '?', '/'
-          @show_help = !@show_help
-          changed = true
-        when '0'..'9'
-          @selected_day = key.to_i
           changed = true
         end
       rescue IOError, Errno::EIO
