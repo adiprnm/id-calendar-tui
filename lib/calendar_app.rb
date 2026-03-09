@@ -57,11 +57,11 @@ module IndonesiaCalendar
       $stdout.flush
     end
 
-    def cleanup_terminal
-      system('stty -cbreak echo 2>/dev/null') || system('stty icanon echo 2>/dev/null')
-      @cursor.show
-      print "\e[?1049l"
-      $stdout.flush
+    def get_terminal_size
+      height, width = `stty size`.split.map(&:to_i)
+      [height, width]
+    rescue StandardError
+      [24, 80] # Default fallback
     end
 
     def main_loop
@@ -73,17 +73,35 @@ module IndonesiaCalendar
     end
 
     def render
-      print @cursor.move_to(0, 0)
-      print "\e[J"
+      terminal_height, terminal_width = get_terminal_size
 
-      print render_title
-      print "\n"
-      print render_calendar
-      print "\n"
-      print render_holiday_panel
-      print "\n"
-      print render_status_bar
+      # Calculate vertical centering - position in upper third of screen
+      ui_height = 15 # Smaller value = higher on screen
+      top_padding = [(terminal_height - ui_height) / 3, 0].max
 
+      # Calculate horizontal centering
+      left_padding = [(terminal_width - @screen_width) / 2, 0].max
+
+      print "\e[2J"  # Clear entire screen
+      print "\e[H"   # Move to home position
+
+      # Move cursor to calculated vertical position
+      print "\e[#{top_padding}H" if top_padding > 0
+
+      # Render each component centered
+      title = render_title
+      calendar = render_calendar
+      holiday_panel = render_holiday_panel
+      status_bar = render_status_bar
+
+      all_content = [title, calendar, holiday_panel, status_bar].join("\n")
+
+      # Add left padding to each line
+      centered_lines = all_content.split("\n").map do |line|
+        ' ' * left_padding + line
+      end
+
+      print centered_lines.join("\n")
       $stdout.flush
     end
 
