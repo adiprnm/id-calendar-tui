@@ -41,27 +41,94 @@ module IndonesiaCalendar
 
     private
 
+    def windows?
+      RUBY_PLATFORM =~ /mswin|mingw|cygwin/
+    end
+
     def setup_terminal
       @cursor.hide
       print "\e[?1049h"
       print "\e[?25l"  # Hide cursor using escape sequence
-      system('stty cbreak -echo min 1 time 0 2>/dev/null') || system('stty -icanon -echo min 1 time 0 2>/dev/null')
+
+      if windows?
+        setup_windows_terminal
+      else
+        @original_stty = `stty -g 2>/dev/null`.chomp
+        system('stty cbreak -echo min 1 time 0 2>/dev/null') || system('stty -icanon -echo min 1 time 0 2>/dev/null')
+      end
       $stdout.flush
     end
 
+    def setup_windows_terminal
+      require 'io/console'
+      require 'win32api'
+
+      # Get the Windows console handle
+      kernel32 = Win32API.new('kernel32', 'GetStdHandle', ['L'], 'L')
+      @stdout_handle = kernel32.call(-11)  # STD_OUTPUT_HANDLE = -11
+      @stdin_handle = kernel32.call(-10)   # STD_INPUT_HANDLE = -10
+
+      # Save and set console input mode
+      get_mode = Win32API.new('kernel32', 'GetConsoleMode', %w[L P], 'I')
+      set_mode = Win32API.new('kernel32', 'SetConsoleMode', %w[L L], 'I')
+
+      mode_buf = [0].pack('L')
+      get_mode.call(@stdin_handle, mode_buf)
+      @original_console_mode = mode_buf.unpack1('L')
+
+      # Enable window input, disable line input and echo
+      new_mode = 0x0080 | 0x0008 # ENABLE_WINDOW_INPUT | ENABLE_PROCESSED_INPUT
+      set_mode.call(@stdin_handle, new_mode)
+
+      # Set output mode for virtual terminal processing
+      get_mode.call(@stdout_handle, mode_buf)
+      @original_stdout_mode = mode_buf.unpack1('L')
+      set_mode.call(@stdout_handle, @original_stdout_mode | 0x0004) # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    rescue LoadError
+      # Fall back to basic mode
+    end
+
     def cleanup_terminal
-      system('stty -cbreak echo 2>/dev/null') || system('stty icanon echo 2>/dev/null')
-      print "\e[?25h"  # Show cursor using escape sequence
+      if windows?
+        cleanup_windows_terminal
+      elsif @original_stty && !@original_stty.empty?
+        system("stty #{@original_stty} 2>/dev/null")
+      end
+      print "\e[?25h" # Show cursor using escape sequence
       @cursor.show
       print "\e[?1049l"
       $stdout.flush
     end
 
+    def cleanup_windows_terminal
+      if @stdin_handle && @original_console_mode
+        set_mode = Win32API.new('kernel32', 'SetConsoleMode', %w[L L], 'I')
+        set_mode.call(@stdin_handle, @original_console_mode)
+      end
+      if @stdout_handle && @original_stdout_mode
+        set_mode = Win32API.new('kernel32', 'SetConsoleMode', %w[L L], 'I')
+        set_mode.call(@stdout_handle, @original_stdout_mode)
+      end
+    rescue StandardError
+      # Ignore errors during cleanup
+    end
+
     def get_terminal_size
-      height, width = `stty size`.split.map(&:to_i)
-      [height, width]
+      if windows?
+        get_windows_terminal_size
+      else
+        height, width = `stty size`.split.map(&:to_i)
+        [height, width]
+      end
     rescue StandardError
       [24, 80] # Default fallback
+    end
+
+    def get_windows_terminal_size
+      require 'io/console'
+      $stdout.winsize
+    rescue StandardError
+      [24, 80]
     end
 
     def main_loop
@@ -303,21 +370,15 @@ module IndonesiaCalendar
     def handle_input
       changed = false
       begin
-        begin
-          key = $stdin.getc
-          return false if key.nil?
-        rescue IOError, Errno::EIO
-          return false
-        end
-
-        key = key.bytes.map(&:chr).join
+        key = read_char
+        return false if key.nil?
 
         if key == "\e"
-          c2 = $stdin.getc
+          c2 = read_char
           return false if c2.nil?
 
           if c2 == '['
-            c3 = $stdin.getc
+            c3 = read_char
             case c3
             when 'A' then move_selection(-7)
                           changed = true
@@ -389,6 +450,32 @@ module IndonesiaCalendar
         # Ignore errors
       end
       changed
+    end
+
+    def read_char
+      if windows?
+        read_char_windows
+      else
+        read_char_unix
+      end
+    end
+
+    def read_char_windows
+      require 'io/console'
+      # On Windows, use console API for proper key reading
+      begin
+        # Use IO#raw if available (Ruby 2.4+)
+        $stdin.raw do
+          return $stdin.getch
+        end
+      rescue StandardError
+        # Fallback for older Ruby versions
+        $stdin.getch
+      end
+    end
+
+    def read_char_unix
+      $stdin.getc
     end
 
     def move_selection(delta)
