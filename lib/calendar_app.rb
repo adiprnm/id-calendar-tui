@@ -1,0 +1,433 @@
+require 'date'
+require 'pastel'
+require 'tty-cursor'
+
+require_relative 'holidays'
+
+module IndonesiaCalendar
+  class CalendarApp
+    MONTHS_ID = %w[
+      Januari Februari Maret April Mei Juni
+      Juli Agustus September Oktober November Desember
+    ].freeze
+
+    WEEKDAYS_ID = %w[Min Sen Sel Rab Kam Jum Sab].freeze
+
+    CELL_WIDTH = 4
+
+    attr_reader :view_date, :selected_day
+
+    def initialize
+      @pastel = Pastel.new
+      @view_date = Date.today
+      @selected_day = Date.today.day
+      @running = true
+      @show_help = true
+      @mode = :calendar
+      @screen_width = 70
+      @cursor = TTY::Cursor
+      @needs_redraw = false
+    end
+
+    def run
+      setup_terminal
+      render
+      main_loop
+    ensure
+      cleanup_terminal
+      puts
+      puts @pastel.green('Terima kasih telah menggunakan Kalender Indonesia!')
+    end
+
+    private
+
+    def setup_terminal
+      @cursor.hide
+      print "\e[?1049h"
+      print "\e[?25l"  # Hide cursor using escape sequence
+      system('stty cbreak -echo min 1 time 0 2>/dev/null') || system('stty -icanon -echo min 1 time 0 2>/dev/null')
+      $stdout.flush
+    end
+
+    def cleanup_terminal
+      system('stty -cbreak echo 2>/dev/null') || system('stty icanon echo 2>/dev/null')
+      print "\e[?25h"  # Show cursor using escape sequence
+      @cursor.show
+      print "\e[?1049l"
+      $stdout.flush
+    end
+
+    def cleanup_terminal
+      system('stty -cbreak echo 2>/dev/null') || system('stty icanon echo 2>/dev/null')
+      @cursor.show
+      print "\e[?1049l"
+      $stdout.flush
+    end
+
+    def main_loop
+      while @running
+        changed = handle_input
+        render if changed || @needs_redraw
+        @needs_redraw = false
+      end
+    end
+
+    def render
+      print @cursor.move_to(0, 0)
+      print "\e[J"
+
+      print render_title
+      print "\n"
+      print render_calendar
+      print "\n"
+      print render_holiday_panel
+      print "\n"
+      print render_status_bar
+
+      $stdout.flush
+    end
+
+    def render_title
+      title_text = 'KALENDER INDONESIA'
+      date_text = "#{MONTHS_ID[@view_date.month - 1]} #{@view_date.year}"
+      today_text = "Hari Ini: #{Date.today.day} #{MONTHS_ID[Date.today.month - 1]} #{Date.today.year}"
+
+      lines = []
+      lines << @pastel.cyan("┌#{'─' * (@screen_width - 2)}┐")
+      lines << @pastel.cyan('│') + center_text(@pastel.bold.yellow("★ #{title_text} ★"),
+                                               @screen_width - 2) + @pastel.cyan('│')
+      lines << @pastel.cyan('│') + center_text(@pastel.white(date_text), @screen_width - 2) + @pastel.cyan('│')
+      lines << @pastel.cyan('│') + center_text(@pastel.bright_black(today_text), @screen_width - 2) + @pastel.cyan('│')
+      lines << @pastel.cyan("└#{'─' * (@screen_width - 2)}┘")
+
+      lines.join("\n")
+    end
+
+    def render_calendar
+      month_holidays = IndonesiaCalendar::Holidays.holidays_for_month(@view_date.year, @view_date.month)
+
+      first_day = Date.new(@view_date.year, @view_date.month, 1)
+      last_day = Date.new(@view_date.year, @view_date.month, -1)
+      days_in_month = last_day.day
+      start_wday = first_day.wday
+
+      lines = []
+
+      # Calendar content width should match screen width minus borders
+      content_width = @screen_width - 4 # │ space ... space │
+      calendar_grid_width = CELL_WIDTH * 7 + 6 # 7 cells + 6 spaces between
+      calendar_padding = (content_width - calendar_grid_width) / 2
+
+      title = " #{MONTHS_ID[@view_date.month - 1]} #{@view_date.year} "
+      lines << @pastel.cyan("┌─#{title}#{'─' * (@screen_width - 3 - title.length)}┐")
+
+      header = WEEKDAYS_ID.each_with_index.map do |d, i|
+        if [0, 6].include?(i)
+          @pastel.red(d.center(CELL_WIDTH))
+        else
+          @pastel.yellow(d.center(CELL_WIDTH))
+        end
+      end.join(' ')
+
+      header_visible = header.gsub(/\e\[[0-9;]*m/, '')
+      # Center the header in the content area
+      lines << @pastel.cyan("│ #{' ' * calendar_padding}#{header}#{' ' * (content_width - calendar_padding - header_visible.length)} │")
+      lines << @pastel.cyan("│ #{' ' * calendar_padding}#{'─' * calendar_grid_width}#{' ' * (content_width - calendar_padding - calendar_grid_width)} │")
+
+      current_line = Array.new(start_wday) { ' ' * CELL_WIDTH }
+
+      (1..days_in_month).each do |day|
+        current_date = Date.new(@view_date.year, @view_date.month, day)
+        day_str = format_day_cell(current_date, day, month_holidays)
+        current_line << day_str
+
+        next unless current_line.length == 7
+
+        line_content = current_line.join(' ')
+        line_visible = line_content.gsub(/\e\[[0-9;]*m/, '')
+        lines << @pastel.cyan("│ #{' ' * calendar_padding}#{line_content}#{' ' * (content_width - calendar_padding - line_visible.length)} │")
+        current_line = []
+      end
+
+      unless current_line.empty?
+        current_line += Array.new(7 - current_line.length, ' ' * CELL_WIDTH)
+        line_content = current_line.join(' ')
+        line_visible = line_content.gsub(/\e\[[0-9;]*m/, '')
+        lines << @pastel.cyan("│ #{' ' * calendar_padding}#{line_content}#{' ' * (content_width - calendar_padding - line_visible.length)} │")
+      end
+
+      weeks_count = ((days_in_month + start_wday) / 7.0).ceil
+      (5 - weeks_count).times do
+        lines << @pastel.cyan("│ #{' ' * calendar_padding}#{' ' * calendar_grid_width}#{' ' * (content_width - calendar_padding - calendar_grid_width)} │")
+      end
+
+      lines << @pastel.cyan("└#{'─' * (@screen_width - 2)}┘")
+
+      lines.join("\n")
+    end
+
+    def format_day_cell(date, day, month_holidays)
+      day_num = day.to_s.rjust(2)
+      is_holiday = month_holidays.key?(date)
+      is_today = date == Date.today
+      is_weekend = date.wday == 0 || date.wday == 6
+      is_selected = day == @selected_day && date.month == @view_date.month
+
+      if is_today
+        @pastel.on_green.black(" #{day_num} ")
+      elsif is_holiday
+        if is_selected
+          @pastel.on_red.white(" #{day_num}*")
+        else
+          @pastel.red(" #{day_num}*")
+        end
+      elsif is_weekend
+        if is_selected
+          @pastel.on_bright_black.white(" #{day_num} ")
+        else
+          @pastel.bright_black(" #{day_num} ")
+        end
+      elsif is_selected
+        @pastel.on_cyan.black(" #{day_num} ")
+      else
+        @pastel.white(" #{day_num} ")
+      end
+    end
+
+    def render_holiday_panel
+      month_holidays = IndonesiaCalendar::Holidays.holidays_for_month(@view_date.year, @view_date.month)
+
+      selected_date = begin
+        Date.new(@view_date.year, @view_date.month, @selected_day)
+      rescue StandardError
+        @view_date
+      end
+
+      lines = []
+      lines << @pastel.yellow("┌─ Hari Libur #{'─' * (@screen_width - 15)}┐")
+
+      if month_holidays.empty?
+        text = '  Tidak ada hari libur bulan ini'
+        lines << @pastel.yellow('│') + text.ljust(@screen_width - 2) + @pastel.yellow('│')
+      else
+        month_holidays.each do |date, holiday|
+          marker = date == selected_date ? @pastel.bold.green('▶') : ' '
+          day_str = @pastel.cyan(date.day.to_s.rjust(2))
+          name = @pastel.white(holiday[:name])
+          type = format_holiday_type(holiday[:type])
+
+          line = "  #{marker} #{day_str}. #{name} #{type}"
+          line_visible = line.gsub(/\e\[[0-9;]*m/, '')
+          lines << @pastel.yellow('│') + line + ' ' * (@screen_width - 2 - line_visible.length) + @pastel.yellow('│')
+        end
+      end
+
+      lines << @pastel.yellow("│#{' ' * (@screen_width - 2)}│")
+      lines << @pastel.yellow("└#{'─' * (@screen_width - 2)}┘")
+
+      lines.join("\n")
+    end
+
+    def format_holiday_type(type)
+      case type
+      when :national
+        @pastel.red('[Nasional]')
+      when :religious
+        @pastel.magenta('[Keagamaan]')
+      when :cultural
+        @pastel.cyan('[Budaya]')
+      else
+        ''
+      end
+    end
+
+    def render_status_bar
+      selected_date = begin
+        Date.new(@view_date.year, @view_date.month, @selected_day)
+      rescue StandardError
+        @view_date
+      end
+      month_holidays = IndonesiaCalendar::Holidays.holidays_for_month(@view_date.year, @view_date.month)
+
+      if month_holidays.key?(selected_date)
+        holiday = month_holidays[selected_date]
+        status = "★ #{holiday[:name]}"
+      else
+        status = "#{WEEKDAYS_ID[selected_date.wday]}, #{@selected_day} #{MONTHS_ID[@view_date.month - 1]} #{@view_date.year}"
+      end
+
+      lines = []
+      lines << @pastel.magenta("┌#{'─' * (@screen_width - 2)}┐")
+      lines << @pastel.magenta('│') + " #{status.ljust(@screen_width - 3)}" + @pastel.magenta('│')
+
+      help_items = [
+        "#{@pastel.bright_black('< >')} #{@pastel.bright_black('Bulan')}",
+        "#{@pastel.bright_black('HJKL')} #{@pastel.bright_black('Nav')}",
+        "#{@pastel.bright_black('g')} #{@pastel.bright_black('Today')}",
+        "#{@pastel.bright_black('y')} #{@pastel.bright_black('Tahun')}",
+        "#{@pastel.bright_black('?')} #{@pastel.bright_black('Help')}",
+        "#{@pastel.bright_black('q')} #{@pastel.bright_black('Keluar')}"
+      ]
+
+      help_text = help_items.join('   ')
+      help_visible = help_text.gsub(/\e\[[0-9;]*m/, '')
+      content_width = @screen_width - 4 # │ space ... space │
+      help_padding = (content_width - help_visible.length) / 2
+      help_line = " #{' ' * help_padding}#{help_text}#{' ' * (content_width - help_visible.length - help_padding)} "
+
+      lines << @pastel.magenta("├#{'─' * (@screen_width - 2)}┤")
+      lines << @pastel.magenta('│') + help_line + @pastel.magenta('│')
+      lines << @pastel.magenta("└#{'─' * (@screen_width - 2)}┘")
+
+      lines.join("\n")
+    end
+
+    def handle_input
+      changed = false
+      begin
+        begin
+          key = $stdin.getc
+          return false if key.nil?
+        rescue IOError, Errno::EIO
+          return false
+        end
+
+        key = key.bytes.map(&:chr).join
+
+        if key == "\e"
+          c2 = $stdin.getc
+          return false if c2.nil?
+
+          if c2 == '['
+            c3 = $stdin.getc
+            case c3
+            when 'A' then move_selection(-7)
+                          changed = true
+            when 'B' then move_selection(7)
+                          changed = true
+            when 'C'
+              @view_date = @view_date >> 1
+              @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+              changed = true
+            when 'D'
+              @view_date = @view_date << 1
+              @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+              changed = true
+            end
+          end
+          return changed
+        end
+
+        case key
+        when 'q', 'Q', "\u0003"
+          @running = false
+        when 'h', 'H'
+          @view_date = @view_date << 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when 'l', 'L'
+          @view_date = @view_date >> 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when 'k', 'K'
+          move_selection(-7)
+          changed = true
+        when 'j', 'J'
+          move_selection(7)
+          changed = true
+        when 'w', 'W'
+          @view_date = @view_date >> 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when 'b', 'B'
+          @view_date = @view_date << 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when ',', '<'
+          @view_date = @view_date << 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when '.', '>'
+          @view_date = @view_date >> 1
+          @selected_day = [@selected_day, Date.new(@view_date.year, @view_date.month, -1).day].min
+          changed = true
+        when 'g'
+          @view_date = Date.today
+          @selected_day = Date.today.day
+          changed = true
+        when 'y', 'Y'
+          show_year_holidays
+          changed = true
+        when '?', '/'
+          @show_help = !@show_help
+          changed = true
+        when '0'..'9'
+          @selected_day = key.to_i
+          changed = true
+        end
+      rescue IOError, Errno::EIO
+        @running = false
+      rescue StandardError => e
+        # Ignore errors
+      end
+      changed
+    end
+
+    def move_selection(delta)
+      days_in_month = Date.new(@view_date.year, @view_date.month, -1).day
+      new_day = @selected_day + delta
+
+      if new_day < 1
+        @view_date = @view_date << 1
+        prev_month_days = Date.new(@view_date.year, @view_date.month, -1).day
+        @selected_day = prev_month_days + new_day
+      elsif new_day > days_in_month
+        @view_date = @view_date >> 1
+        @selected_day = new_day - days_in_month
+      else
+        @selected_day = new_day
+      end
+    end
+
+    def show_year_holidays
+      all_holidays = IndonesiaCalendar::Holidays.all_holidays_for_year(@view_date.year)
+
+      print @cursor.show
+      print "\e[?1049l"
+      puts
+
+      puts @pastel.cyan('═' * 70)
+      puts @pastel.cyan("  DAFTAR HARI LIBUR NASIONAL TAHUN #{@view_date.year} ".ljust(70))
+      puts @pastel.cyan('═' * 70)
+      puts
+
+      all_holidays.group_by { |date, _| date.month }.sort.each do |month, holidays|
+        puts @pastel.yellow("┌─ #{MONTHS_ID[month - 1]} #{@view_date.year} ".ljust(68, '─')) + @pastel.yellow('┐')
+
+        holidays.each do |date, holiday|
+          line = "  #{@pastel.white(date.day.to_s.rjust(2))}. #{@pastel.white(holiday[:name].to_s.ljust(35))} #{format_holiday_type(holiday[:type])}"
+          line += "  #{@pastel.yellow(holiday[:hijri_date])}" if holiday[:hijri_date]
+          puts @pastel.yellow('│') + line.ljust(66) + @pastel.yellow('│')
+        end
+
+        puts @pastel.yellow('│' + ' ' * 66 + '│')
+        puts @pastel.yellow('└' + '─' * 66 + '┘')
+        puts
+      end
+
+      puts @pastel.bright_black('  Tekan tombol apa saja untuk kembali...')
+      $stdin.getc
+
+      print "\e[?1049h"
+      @cursor.hide
+    end
+
+    def center_text(text, width)
+      visible_width = text.gsub(/\e\[[0-9;]*m/, '').length
+      total_padding = [(width - visible_width), 0].max
+      left_padding = total_padding / 2
+      right_padding = total_padding - left_padding
+      ' ' * left_padding + text + ' ' * right_padding
+    end
+  end
+end
