@@ -2,12 +2,12 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'id-calendar-tui'
-  spec.version       = '0.1.0'
+  spec.version       = '0.1.1'
   spec.authors       = ['Your Name']
   spec.email         = ['your.email@example.com']
   spec.summary       = 'Terminal-based Indonesian calendar with holiday support'
   spec.description   = 'A TUI calendar application displaying Indonesian public holidays with vim-like navigation'
-  spec.homepage      = 'https://github.com/adipurnm/indonesia-cal-tui'
+  spec.homepage      = 'https://github.com/adipurnm/id-calendar-tui'
   spec.license       = 'MIT'
   spec.required_ruby_version = '>= 2.6.0'
 

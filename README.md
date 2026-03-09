@@ -1,7 +1,7 @@
 # ID Calendar TUI
 
 [![Gem Version](https://badge.fury.io/rb/id-calendar-tui.svg)](https://badge.fury.io/rb/id-calendar-tui)
-[![Docker Image](https://img.shields.io/badge/GHCR-latest-blue?logo=docker)](https://github.com/adiprnm/indonesia-cal-tui/pkgs/container/indonesia-cal-tui)
+[![Docker Image](https://img.shields.io/badge/GHCR-latest-blue?logo=docker)](https://github.com/adiprnm/id-calendar-tui/pkgs/container/id-calendar-tui)
 
 A terminal-based calendar application for Indonesian public holidays with vim-like navigation.
 
@@ -28,14 +28,14 @@ calendar
 ### Via Docker (GHCR)
 
 ```bash
-docker run --rm -it ghcr.io/adiprnm/indonesia-cal-tui:latest
+docker run --rm -it ghcr.io/adiprnm/id-calendar-tui:latest
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/adiprnm/indonesia-cal-tui.git
-cd indonesia-cal-tui
+git clone https://github.com/adiprnm/id-calendar-tui.git
+cd id-calendar-tui
 bundle install
 bundle exec ruby bin/calendar
 ```
@@ -103,7 +103,7 @@ git push origin vx.x.x
 
 This will automatically:
 - Publish to [RubyGems](https://rubygems.org/gems/id-calendar-tui)
-- Publish Docker image to [GHCR](https://github.com/adiprnm/indonesia-cal-tui/pkgs/container/indonesia-cal-tui)
+- Publish Docker image to [GHCR](https://github.com/adiprnm/id-calendar-tui/pkgs/container/id-calendar-tui)
 
 ## Contributing
 
