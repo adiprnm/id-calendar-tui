@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 Gem::Specification.new do |spec|
-  spec.name          = 'indonesia-cal-tui'
+  spec.name          = 'id-calendar-tui'
   spec.version       = '0.1.0'
   spec.authors       = ['Your Name']
   spec.email         = ['your.email@example.com']
