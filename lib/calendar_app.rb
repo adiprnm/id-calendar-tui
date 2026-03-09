@@ -316,20 +316,22 @@ module IndonesiaCalendar
       lines = []
 
       help_items = [
-        "#{@pastel.bright_black('j l')} #{@pastel.bright_black('Bulan')}",
+        "#{@pastel.bright_black('h')} #{@pastel.bright_black('Bulan')}#{@pastel.bright_black(' -')}",
+        "#{@pastel.bright_black('l')} #{@pastel.bright_black('Bulan')}#{@pastel.bright_black(' +')}",
+        "#{@pastel.bright_black('j')} #{@pastel.bright_black('Tahun')}#{@pastel.bright_black(' -')}",
+        "#{@pastel.bright_black('k')} #{@pastel.bright_black('Tahun')}#{@pastel.bright_black(' +')}",
         "#{@pastel.bright_black('g')} #{@pastel.bright_black('Today')}",
-        "#{@pastel.bright_black('y')} #{@pastel.bright_black('Tahun')}",
         "#{@pastel.bright_black('q')} #{@pastel.bright_black('Keluar')}"
       ]
 
-      help_text = help_items.join('   ')
+      help_text = help_items.join('  ')
       help_visible = help_text.gsub(/\e\[[0-9;]*m/, '')
       content_width = @screen_width - 4 # │ space ... space │
       help_padding = (content_width - help_visible.length) / 2
       help_line = " #{' ' * help_padding}#{help_text}#{' ' * (content_width - help_visible.length - help_padding)} "
 
       lines << ''
-      lines << " #{ help_line }"
+      lines << " #{help_line} "
 
       lines.join("\n")
     end
@@ -367,23 +369,14 @@ module IndonesiaCalendar
         when 'l', 'L'
           @view_date = @view_date >> 1
           changed = true
-        when 'w', 'W'
-          @view_date = @view_date >> 1
+        when 'j', 'J'
+          @view_date = Date.new(@view_date.year - 1, @view_date.month, 1)
           changed = true
-        when 'b', 'B'
-          @view_date = @view_date << 1
-          changed = true
-        when ',', '<'
-          @view_date = @view_date << 1
-          changed = true
-        when '.', '>'
-          @view_date = @view_date >> 1
+        when 'k', 'K'
+          @view_date = Date.new(@view_date.year + 1, @view_date.month, 1)
           changed = true
         when 'g'
           @view_date = Date.today
-          changed = true
-        when 'y', 'Y'
-          show_year_holidays
           changed = true
         end
       rescue IOError, Errno::EIO
@@ -418,55 +411,6 @@ module IndonesiaCalendar
 
     def read_char_unix
       $stdin.getc
-    end
-
-    def move_selection(delta)
-      days_in_month = Date.new(@view_date.year, @view_date.month, -1).day
-      new_day = @selected_day + delta
-
-      if new_day < 1
-        @view_date = @view_date << 1
-        prev_month_days = Date.new(@view_date.year, @view_date.month, -1).day
-        @selected_day = prev_month_days + new_day
-      elsif new_day > days_in_month
-        @view_date = @view_date >> 1
-        @selected_day = new_day - days_in_month
-      else
-        @selected_day = new_day
-      end
-    end
-
-    def show_year_holidays
-      all_holidays = IndonesiaCalendar::Holidays.all_holidays_for_year(@view_date.year)
-
-      print @cursor.show
-      print "\e[?1049l"
-      puts
-
-      puts @pastel.cyan('═' * 70)
-      puts @pastel.cyan("  DAFTAR HARI LIBUR NASIONAL TAHUN #{@view_date.year} ".ljust(70))
-      puts @pastel.cyan('═' * 70)
-      puts
-
-      all_holidays.group_by { |date, _| date.month }.sort.each do |month, holidays|
-        puts @pastel.yellow("┌─ #{MONTHS_ID[month - 1]} #{@view_date.year} ".ljust(68, '─')) + @pastel.yellow('┐')
-
-        holidays.each do |date, holiday|
-          line = "  #{@pastel.white(date.day.to_s.rjust(2))}. #{@pastel.white(holiday[:name].to_s.ljust(35))} #{format_holiday_type(holiday[:type])}"
-          line += "  #{@pastel.yellow(holiday[:hijri_date])}" if holiday[:hijri_date]
-          puts @pastel.yellow('│') + line.ljust(66) + @pastel.yellow('│')
-        end
-
-        puts @pastel.yellow('│' + ' ' * 66 + '│')
-        puts @pastel.yellow('└' + '─' * 66 + '┘')
-        puts
-      end
-
-      puts @pastel.bright_black('  Tekan tombol apa saja untuk kembali...')
-      $stdin.getc
-
-      print "\e[?1049h"
-      @cursor.hide
     end
 
     def center_text(text, width)
