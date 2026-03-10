@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'id-calendar-tui'
-  spec.version       = '0.1.1'
+  spec.version       = '0.1.2'
   spec.authors       = ['Your Name']
   spec.email         = ['your.email@example.com']
   spec.summary       = 'Terminal-based Indonesian calendar with holiday support'
